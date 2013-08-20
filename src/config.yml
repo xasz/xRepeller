@@ -1,0 +1,17 @@
+#default config.yml
+
+#distance of each block
+ironRepellDistance: 2
+goldRepellDistance: 5
+diamondRepellDistance: 10
+
+#maxdistance of each block
+ironMaxRepellDistance: 20
+goldMaxRepellDistance: 50
+diamondMaxRepellDistance: 100
+mysql:
+    username: lol
+    password: lol
+    db: lol
+    port: lol
+    server: lol
