@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.bukkit.ChatColor;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
@@ -15,70 +14,36 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
-/**
- * Listens of Blocks and CHest
- * 
- * @author xasz
- * 
- */
 public class xRepellListener implements Listener {
+	private xRepeller plugin;
+	private xRepellerContainer container;
 
-	private xRepeller plugin = null;
-
-	// list for saving all the repeller on runtime
-	List<xRepellConstruct> repeller = new ArrayList<xRepellConstruct>();
-
-	/**
-	 * returns all repeller as list
-	 * 
-	 * @return
-	 */
-	public List<xRepellConstruct> getRepeller() {
-		return repeller;
-	}
-
-	/**
-	 * set a new repellerlist, old data will be deleted
-	 * 
-	 * @param repeller
-	 */
-	public void setRepeller(List<xRepellConstruct> repeller) {
-		this.repeller = repeller;
-	}
-
-	/**
-	 * creates a new instance of the Listener
-	 * 
-	 * @param instance
-	 */
-	public xRepellListener(xRepeller instance) {
-		this.plugin = instance;
+	public xRepellListener(xRepeller plugin, xRepellerContainer container) {
+		this.plugin = plugin;
+		this.container = container;
 		this.plugin.getServer().getPluginManager().registerEvents(this, plugin);
 	}
 
-	/**
-	 * listens to blocks, if there is a new repeller created
-	 * 
-	 * @param event
-	 */
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void onBlockBreak(BlockBreakEvent event) {
+		
 		Player player = event.getPlayer();
 		Block block = event.getBlock();
 		Material mat = block.getType();
+		
 		if (mat == Material.IRON_BLOCK || mat == Material.GOLD_BLOCK
 				|| mat == Material.DIAMOND_BLOCK || mat == Material.CHEST) {
 			// have to be checked
-			for (int i = 0; i < repeller.size(); i++) {
-				if (repeller.get(i).isPartOf(block)) {
-					if (!event.getPlayer().hasPermission("xRepeller.create")) {
+			for (xRepellerConstruct repeller : this.container
+					.getThreadSafeArray())
+				if (repeller.isPartOf(block)) {
+					if (!event.getPlayer().hasPermission("xRepeller.destroy")) {
 						player.sendMessage(ChatColor.YELLOW
 								+ "[xRepeller]"
 								+ ChatColor.WHITE
@@ -89,58 +54,105 @@ public class xRepellListener implements Listener {
 					player.sendMessage(ChatColor.YELLOW + "[xRepeller]"
 							+ ChatColor.WHITE
 							+ "You destroyed a Mobrepeller. Type:"
-							+ repeller.get(i).getMatieral().toString());
+							+ repeller.getMatieral().toString());
 
-					repeller.remove(i);
-					plugin.getConnector().deleteRepeller(
-							event.getBlock().getWorld().getUID().toString(),
-							event.getBlock().getX(), event.getBlock().getY(),
-							event.getBlock().getZ());
-
-					// this.plugin.sql.deleteRepeller(repeller.get(i));
+					this.container.remove(repeller);
 					break;
 				}
-			}
 		}
 
 	}
-
-	/**
-	 * listens to blocks, if there is a repeller destroyed
-	 * 
-	 * @param event
-	 */
+	
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void onBlockPlace(BlockPlaceEvent event) {
 		Player player = event.getPlayer();
 		Block block = event.getBlock();
-		xRepellConstruct rc = xRepellConstruct.isRepeller(block);
-		if (rc != null) {
-			if (event.getPlayer().hasPermission("xRepeller.create")) {
-				player.sendMessage(ChatColor.YELLOW + "[xRepeller]"
-						+ ChatColor.WHITE
-						+ "You build a new Mobrepeller. Type:"
-						+ rc.getMatieral().toString());
-				player.sendMessage(ChatColor.YELLOW
-						+ "[xRepeller]"
-						+ ChatColor.WHITE
-						+ "Hit on the Chest after you changed its content to check the radius!");
-				repeller.add(rc);
-				plugin.getConnector().saveRepeller(repeller);
-			} else {
-				player.sendMessage(ChatColor.YELLOW + "[xRepeller]"
-						+ ChatColor.WHITE
-						+ "You have no Permission to build a xRepeller.");
-			}
 
+		if(block.getType() == Material.CHEST){
+			if(xRepellerConstruct.simpleConstructionCheck((Chest)block.getState())){
+				if (event.getPlayer().hasPermission("xRepeller.create")) {
+					xRepellerConstruct repeller = new xRepellerConstruct(this.plugin,block.getWorld().getUID().toString(),block.getX(),block.getY(),block.getZ(),player.getName());
+					repeller.init();
+					player.sendMessage(ChatColor.YELLOW + "[xRepeller]"
+							+ ChatColor.WHITE
+							+ "You build a new Mobrepeller. Type:"
+							+ repeller.getMatieral().toString());
+					player.sendMessage(ChatColor.YELLOW
+							+ "[xRepeller]"
+							+ ChatColor.WHITE
+							+ "Hit on the Chest after you changed its content to check the radius!");
+					this.container.add(repeller);
+				} else {
+					player.sendMessage(ChatColor.YELLOW + "[xRepeller]"
+							+ ChatColor.WHITE
+							+ "You have no Permission to build a xRepeller.");
+				}
+			}
+		}
+		
+	}
+	@EventHandler(priority = EventPriority.NORMAL)
+	public void onInventoryClose(InventoryCloseEvent event) {
+		try {
+			if (event.getInventory().getHolder() instanceof Chest) {
+				for (xRepellerConstruct repeller : this.container
+						.getThreadSafeArray()) {
+					if (((Chest) event.getInventory().getHolder()).getBlock()
+							.equals(repeller.getChestblock())) {
+						repeller.calcRadius();
+						 this.plugin.logger.info("Repeller is recalculated at position " + repeller.getChestblock().getX()+ repeller.getChestblock().getY()+ repeller.getChestblock().getZ());
+					}
+				}
+			}
+		} catch (Exception ex) {
 		}
 	}
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void playerLeftClick(PlayerInteractEvent event) {
+		if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+			if (event.getClickedBlock().getType() == Material.CHEST) {
+				Chest thisChest = (Chest) event.getClickedBlock().getState();
+				for (xRepellerConstruct repeller : this.container
+						.getThreadSafeArray())  {
+					if (repeller.isPartOf(thisChest)) {
+						repeller.calcRadius();
+						if (repeller.isMaxRadius()) {
+							event.getPlayer().sendMessage(
+									ChatColor.YELLOW + "[xRepeller]"
+											+ ChatColor.WHITE
+											+ "Maximum radius "
+											+ repeller.getMaxRadius()
+											+ " reached! Current radius: "
+											+ repeller.getRepellRadius());
+						} else {
+							event.getPlayer().sendMessage(
+									ChatColor.YELLOW + "[xRepeller]"
+											+ ChatColor.WHITE
+											+ "Current radius: "
+											+ repeller.getRepellRadius());
+						}
+						if (!repeller.isRepellingUnnatural()) {
+							event.getPlayer()
+									.sendMessage(
+											ChatColor.YELLOW
+													+ "[xRepeller]"
+													+ ChatColor.WHITE
+													+ "This xRepeller does not repell Spawner, Egg oder Custom spawned Mobs.");
+						}
 
-	/**
-	 * checks if spawnevents are repelled
-	 * 
-	 * @param event
-	 */
+						if (!repeller.isRepellingFriendly()) {
+							event.getPlayer()
+									.sendMessage(
+											ChatColor.YELLOW
+													+ "[xRepeller]"
+													+ ChatColor.WHITE
+													+ "This xRepeller does not repell friendly Mobs.");
+						}
+					}
+				}
+			}
+		}
+	}
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void onSpawn(CreatureSpawnEvent event) {
 		EntityType type = null;
@@ -154,7 +166,8 @@ public class xRepellListener implements Listener {
 		badMobs.add(EntityType.SKELETON);
 		badMobs.add(EntityType.PIG_ZOMBIE);
 		badMobs.add(EntityType.MAGMA_CUBE);
-		badMobs.add(EntityType.GIANT); badMobs.add(EntityType.GHAST);
+		badMobs.add(EntityType.GIANT); 
+		badMobs.add(EntityType.GHAST);
 		badMobs.add(EntityType.ENDERMAN);
 		badMobs.add(EntityType.CREEPER);
 		badMobs.add(EntityType.CAVE_SPIDER);
@@ -171,6 +184,7 @@ public class xRepellListener implements Listener {
 		friendlyMobs.add(EntityType.SQUID);
 		friendlyMobs.add(EntityType.WOLF);
 		friendlyMobs.add(EntityType.MUSHROOM_COW);
+		friendlyMobs.add(EntityType.HORSE);
 		
 		try {
 			type = event.getEntityType();
@@ -180,134 +194,43 @@ public class xRepellListener implements Listener {
 			isFriendly = friendlyMobs.contains(type);
 			
 			if (isBad || isFriendly) {
-				for (xRepellConstruct x : repeller) {
-					if (x.isInActiveChunk()) {
-						if (x.isRepellingLocation(event.getLocation())) {
-							// the location would be repelled
-							if(isFriendly){
-								if(!x.isRepellingFriendly()){
-									break;
+				for (xRepellerConstruct repeller : this.container
+						.getThreadSafeArray()) {
+					try{
+						if (repeller.isInActiveChunk()){
+							if (repeller.isRepellingLocation(event.getLocation())) {
+								// the location would be repelled
+								if(isFriendly){
+									if(!repeller.isRepellingFriendly()){
+										break;
+									}
 								}
-							}
-							if (x.isRepellingUnnatural()) {
-								event.setCancelled(true);
-								break;
-							} else {
-								if ( event.getSpawnReason() == SpawnReason.SPAWNER_EGG
-									|| event.getSpawnReason() == SpawnReason.SPAWNER
-									|| event.getSpawnReason() == SpawnReason.CUSTOM
-									|| event.getSpawnReason() == SpawnReason.BREEDING) {
+								if (repeller.isRepellingUnnatural()) {
+									event.setCancelled(true);
 									break;
-									// do not break the event
-								}else{
-					                event.setCancelled(true);
-					                break;
-					              }
-							}	
-							
+								} else {
+									if ( event.getSpawnReason() == SpawnReason.SPAWNER_EGG
+										|| event.getSpawnReason() == SpawnReason.SPAWNER
+										|| event.getSpawnReason() == SpawnReason.CUSTOM
+										|| event.getSpawnReason() == SpawnReason.BREEDING) {
+										break;
+										// do not break the event
+									}else{
+						                event.setCancelled(true);
+						                break;
+						              }
+								}	
+								
+							}
 						}
+					}catch(Exception ex){
+						
 					}
 				}
 			}
 		} catch (Exception e) {
-			System.out.println("[xRepeller]: No Valid Spawnevent");
-		}
-	}
-
-	/**
-	 * checks if a inventory of a repeller chest is closed if yes the repeller
-	 * will be recalculated
-	 * 
-	 * @param event
-	 */
-	@EventHandler(priority = EventPriority.NORMAL)
-	public void onInventoryClose(InventoryCloseEvent event) {
-		try {
-			if (event.getInventory().getHolder() instanceof Chest) {
-				for (xRepellConstruct x : repeller) {
-					if (((Chest) event.getInventory().getHolder()).getBlock()
-							.equals(x.getChestblock())) {
-						x.calcRadius();
-						System.out.println("Repeller ist recalculated");
-					}
-				}
-			}
-		} catch (Exception ex) {
-			// nothing to do
-			System.out.println(ex.getMessage());
-		}
-	}
-
-	/**
-	 * Shows the player the effective radius of the repeller
-	 * 
-	 * @param event
-	 */
-	@EventHandler(priority = EventPriority.MONITOR)
-	public void playerLeftClick(PlayerInteractEvent event) {
-		if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
-			if (event.getClickedBlock().getType() == Material.CHEST) {
-				Chest thisChest = (Chest) event.getClickedBlock().getState();
-				for (xRepellConstruct x : repeller) {
-					if (x.isPartOf(thisChest)) {
-						if (x.calcRadius()) {
-							event.getPlayer().sendMessage(
-									ChatColor.YELLOW + "[xRepeller]"
-											+ ChatColor.WHITE
-											+ "Maximum radius "
-											+ x.getMaxRadius()
-											+ " reached! Current radius: "
-											+ x.getRepellRadius());
-						} else {
-							event.getPlayer().sendMessage(
-									ChatColor.YELLOW + "[xRepeller]"
-											+ ChatColor.WHITE
-											+ "Current radius: "
-											+ x.getRepellRadius());
-						}
-						if (!x.isRepellingUnnatural()) {
-							event.getPlayer()
-									.sendMessage(
-											ChatColor.YELLOW
-													+ "[xRepeller]"
-													+ ChatColor.WHITE
-													+ "This xRepeller does not repell Spawner, Egg oder Custom spawned Mobs.");
-						}
-
-						if (!x.isRepellingFriendly()) {
-							event.getPlayer()
-									.sendMessage(
-											ChatColor.YELLOW
-													+ "[xRepeller]"
-													+ ChatColor.WHITE
-													+ "This xRepeller does not repell friendly Mobs.");
-						}
-					}
-				}
-			}
-		}
-	}
-
-	@EventHandler(priority = EventPriority.NORMAL)
-	public void onPistonExtend(BlockPistonExtendEvent event) {
-		List<Block> iBlocks = event.getBlocks();
-		for (Block block : iBlocks) {
-			// oldposition
-			Location triggeredBlockloc = block.getRelative(
-					event.getDirection(), 0).getLocation();
-			triggeredBlockloc.setY(triggeredBlockloc.getY());
-			Block triggeredBlock = triggeredBlockloc.getBlock();
-			Material mat = triggeredBlock.getType();
-			if (mat == Material.IRON_BLOCK || mat == Material.GOLD_BLOCK
-					|| mat == Material.DIAMOND_BLOCK || mat == Material.CHEST) {
-				// have to be checked
-				for (int i = 0; i < repeller.size(); i++) {
-					if (repeller.get(i).isPartOf(block)) {
-						event.setCancelled(true);
-						break;
-					}
-				}
-			}
+			this.plugin.logger.info("No Valid Spawnevent");
+			e.printStackTrace();
 		}
 	}
 }
