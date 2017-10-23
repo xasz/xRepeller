@@ -3,7 +3,7 @@ version: 2.3
 description: The ultimate Civilization Forum Plugin - New Version
 
 author: xasz
-website: http://civforum.de/forumdisplay.php?f=405
+website: https://github.com/xasz/xRepeller
 main: me.xasz.xRepeller.xRepeller
 permissions:
   xRepeller.create:

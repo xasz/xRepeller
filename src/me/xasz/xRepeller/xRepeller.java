@@ -29,7 +29,11 @@ public class xRepeller extends JavaPlugin{
 	  private xRepellListener listener;
 	  
 	  
-	@Override
+	  public xRepellListener getListener() {
+		  return listener;
+	  }
+	  
+	  @Override
 	  public void onEnable()
 	  {
 	    ironRepellDistance = this.getConfig().getInt("ironRepellDistance");

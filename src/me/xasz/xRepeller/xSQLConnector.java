@@ -13,7 +13,6 @@ public class xSQLConnector {
 	private xRepeller plugin;
 
 	private Connection con;
-	private ResultSet rs = null;
 
 	private String server;
 	private int port;

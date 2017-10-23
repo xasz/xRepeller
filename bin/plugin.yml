@@ -1,14 +1,17 @@
 name: xRepeller
-version: 0.8
-description: The ultimate Civilization Forum Plugin
+version: 2.3
+description: The ultimate Civilization Forum Plugin - New Version
 
 author: xasz
-website: http://civforum.de/forumdisplay.php?f=405
+website: https://github.com/xasz/xRepeller
 main: me.xasz.xRepeller.xRepeller
 permissions:
   xRepeller.create:
     description: Allows you to create
     default: true
   xRepeller.destroy:
-    description: Allows you to destory
+    description: Allows you to destroy
+    default: true
+  xRepeller.check:
+    description: Allows you to check a repeller
     default: true
